@@ -1,0 +1,72 @@
+# Builds the guest kernel from build.sh and config. A pushed tag named
+# kernel-<release> publishes the build as that tag's release. A pull request,
+# or a run by hand, builds and prints the digest, and publishes nothing.
+name: kernel
+
+on:
+  push:
+    tags: ['kernel-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: src
+          persist-credentials: false
+
+      - name: Install the build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bc bison flex libelf-dev
+          gcc --version | head -n 1
+          ld --version | head -n 1
+
+      - name: Read the build inputs
+        run: |
+          eval "$(grep -E '^(version|release|archive|url|archive_sha256)=' src/build.sh)"
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF_NAME" != "kernel-$release" ]; then
+            echo "the tag is $GITHUB_REF_NAME, and build.sh builds $release" >&2
+            exit 1
+          fi
+          {
+            echo "release=$release"
+            echo "archive=$archive"
+          } >> "$GITHUB_ENV"
+          printf 'url = %s\nsha256 = %s\n' "$url" "$archive_sha256" > source.txt
+
+      # build.sh writes to ../../target/guest-kernel, relative to itself.
+      - name: Build
+        run: |
+          mkdir -p work/guest/kernel
+          cp src/build.sh src/config work/guest/kernel/
+          work/guest/kernel/build.sh
+          out=work/target/guest-kernel
+          echo "vmlinux SHA-256: $(sha256sum "$out/vmlinux" | cut -d ' ' -f 1)"
+
+      - name: Publish
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out=work/target/guest-kernel
+          digest=$(sha256sum "$out/vmlinux" | cut -d ' ' -f 1)
+          cat > notes.md <<NOTES
+          Linux ${release%-ap.*} for the Agent+ guest, built by \`build.sh\` with \`config\`.
+
+          \`vmlinux\` SHA-256: \`$digest\`
+
+          Source: \`$archive\` is attached, unmodified from kernel.org. Its URL and hash are in \`source.txt\`.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "Linux $release" --notes-file notes.md \
+            "$out/vmlinux" src/config src/build.sh "$out/$archive" source.txt
