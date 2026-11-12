@@ -37,7 +37,8 @@ package's source is in the same snapshot. The release notes give the layer's
 SHA-256.
 
 The files in `os/` are copies from the newest release. To rebuild a layer, you
-need git, docker, and a Rust toolchain. Check out Agent+ at the commit in the
+need an x86-64 Linux host with git, docker, and a Rust toolchain. Another
+architecture builds another root, and another digest. Check out Agent+ at the commit in the
 release's `source.txt`, copy the release's `build.sh` and `debian.sh` into its
 `guest/os`, and run `guest/os/build.sh` from the checkout. It writes the layer
 to `target/guest-os/minimal.erofs`, and prints its SHA-256.
