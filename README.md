@@ -17,8 +17,9 @@ The files in this repository are copies from the newest release.
 
 A kernel's digest depends on the compiler that built it, so `build.sh` pins
 its toolchain: an `ubuntu:24.04` image named by digest, with packages from the
-Ubuntu archive as it was at a fixed snapshot. It needs docker, and it builds
-in a container with no network, at the same paths on every machine.
+Ubuntu archive as it was at a fixed snapshot. It needs docker, and an x86-64
+host or emulation. It builds in a container with no network, at the same
+paths on every machine.
 
 To rebuild a release, put its `build.sh` and `config` in a directory named
 `guest/kernel`, and run the script. It downloads the source archive, checks
