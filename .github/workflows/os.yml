@@ -1,0 +1,75 @@
+# Builds the minimal OS layer from os/build.sh and os/debian.sh. Our EROFS
+# writer makes the layer, so the build runs in a checkout of Agent+ at the
+# commit that os/source.txt names. A pushed tag named os-minimal-<version>
+# publishes the build as that tag's release. A pull request, or a run by hand,
+# builds and prints the digest, and publishes nothing.
+name: os
+
+on:
+  push:
+    tags: ['os-minimal-*']
+  pull_request:
+    paths: ['os/**', '.github/workflows/os.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: src
+          persist-credentials: false
+
+      - name: Read the build inputs
+        run: |
+          repository=$(sed -n 's/^repository = //p' src/os/source.txt)
+          commit=$(sed -n 's/^commit = //p' src/os/source.txt)
+          snapshot=$(sed -n 's/^snapshot=//p' src/os/build.sh)
+          {
+            echo "repository=$repository"
+            echo "commit=$commit"
+            echo "snapshot=$snapshot"
+          } >> "$GITHUB_ENV"
+
+      # The writer comes from this commit, and the scripts from this
+      # repository. build.sh writes to ../../target/guest-os, relative to
+      # itself, and runs cargo in the checkout.
+      - name: Check out the writer
+        run: |
+          git init -q work
+          git -C work fetch -q --depth 1 "$repository" "$commit"
+          git -C work checkout -q --detach FETCH_HEAD
+          cp src/os/build.sh src/os/debian.sh work/guest/os/
+
+      - name: Build
+        working-directory: work
+        run: |
+          guest/os/build.sh
+          echo "minimal.erofs SHA-256: $(sha256sum target/guest-os/minimal.erofs | cut -d ' ' -f 1)"
+
+      - name: Publish
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out=work/target/guest-os
+          digest=$(sha256sum "$out/minimal.erofs" | cut -d ' ' -f 1)
+          cat > notes.md <<NOTES
+          The minimal OS layer for the Agent+ guest: Debian 13 from snapshot.debian.org at \`$snapshot\`, built by \`build.sh\` and \`debian.sh\`.
+
+          \`minimal.erofs\` SHA-256: \`$digest\`
+
+          The EROFS writer is Agent+ at \`$commit\`, as \`source.txt\` says. \`packages.txt\` lists each Debian package and its version, and the source of each is in the same snapshot.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "OS minimal ${GITHUB_REF_NAME#os-minimal-}" \
+            --notes-file notes.md \
+            "$out/minimal.erofs" src/os/build.sh src/os/debian.sh \
+            "$out/packages.txt" src/os/source.txt

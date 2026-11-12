@@ -1,0 +1,2 @@
+repository = https://github.com/jgabor/agent-plus
+commit = 9bafff6945b59503c6c6f2828be7edbe36aeb913
