@@ -41,8 +41,8 @@ Linux is licensed under GPL-2.0.
 
 A release tagged `os-minimal-<version>` holds the `OS minimal` layer:
 
-- `minimal.erofs`, the layer, an EROFS image of Debian 13's essential packages
-  and git
+- `minimal.erofs`, the layer, an EROFS image of Debian 13's essential packages,
+  git, and ca-certificates
 - `build.sh` and `debian.sh`, the scripts that build it
 - `packages.txt`, each Debian package in the layer and its version
 - `source.txt`, the Agent+ commit whose EROFS writer made the layer
